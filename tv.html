@@ -56,7 +56,10 @@ const game = createHost();
 let host = null, theme = getTheme("classic");
 
 function fit() {
-  const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+  // clientWidth/Height = visible area. innerWidth is wrong on Android TV WebView,
+  // where the unscaled 1920px stage widens the layout viewport (960 -> 1200).
+  const e = document.documentElement;
+  const k = Math.min(e.clientWidth / 1920, e.clientHeight / 1080);
   $("#stage").style.setProperty("--k", k);
 }
 addEventListener("resize", fit);
