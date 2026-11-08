@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battleshits — Dev Harness</title>
+<link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../common.css">
+<style>
+  body { overflow: auto; font-size: 14px; }
+  .wrap { position: relative; z-index: 1; padding: 12px; display: grid; grid-template-columns: 1fr 340px; gap: 12px; }
+  .bar { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .bar .btn { font-size: 14px; padding: 8px 12px; }
+  .tvbox { position: relative; width: 100%; aspect-ratio: 16/9; overflow: hidden; border-radius: 10px; outline: 2px solid var(--panel2); }
+  .tvbox iframe { display: none; }
+  #tvStage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; font-size: 32px; }
+  .phones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+  .phone { border: 2px solid var(--panel2); border-radius: 18px; padding: 10px; height: 640px; overflow: auto; font-size: 14px; }
+  .phone h3 { margin: 0 0 6px; font-size: 13px; color: var(--dim); }
+  #log { background: rgba(0,0,0,.35); border-radius: 10px; padding: 10px; height: 1200px; overflow: auto; font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
+  .pass { color: #3ddc84; } .fail { color: #ff6b6b; }
+  label { display: flex; gap: 6px; align-items: center; }
+</style>
+<!-- reuse the TV + phone page styles -->
+<link rel="stylesheet" href="../tv.css">
+<link rel="stylesheet" href="../play.css">
+<style>body{overflow:auto;font-size:14px} .phone .ver{display:none}</style>
+</head>
+<body class="tv">
+<div class="wrap">
+  <div class="bar">
+    <b>DEV HARNESS</b>
+    <button class="btn" id="run">▶ Play live game</button>
+    <button class="btn ghost" id="pause">⏸ Pause</button>
+    <button class="btn ghost" id="theme">Toggle theme</button>
+    <button class="btn ghost" id="fast">Run 100 games headless</button>
+    <label>Speed <input type="range" id="speed" min="30" max="1500" value="350"> <span id="spd"></span>ms</label>
+    <label><input type="checkbox" id="snd"> sound</label>
+    <span id="summary"></span>
+  </div>
+  <div>
+    <div class="tvbox" id="tvbox"><div id="tvStage"><div id="game" class="screen" style="position:absolute;inset:0"></div></div></div>
+    <div class="phones">
+      <div class="phone" id="ph1"><h3>Phone · Bot Ahab (p1)</h3><div class="pg"></div></div>
+      <div class="phone" id="ph2"><h3>Phone · Bot Nemo (p2)</h3><div class="pg"></div></div>
+      <div class="phone" id="ph3"><h3>Phone · Spectator</h3><div class="pg"></div></div>
+    </div>
+  </div>
+  <div id="log"></div>
+</div>
+<script type="module">
+import { createHost, createPhone, initialState, normalizeState, randomFleet, other } from "../battleshits.js";
+import { THEMES, getTheme, applyTheme } from "../themes.js";
+import { play, unlockAudio } from "../sound.js";
+import { simulate, botPick, mulberry32 } from "./sim.js";
+
+const $ = (s) => document.querySelector(s);
+const logEl = $("#log");
+const log = (m, cls = "") => { logEl.insertAdjacentHTML("afterbegin", `<div class="${cls}">${new Date().toLocaleTimeString()} ${m}</div>`); };
+let checks = 0, fails = 0;
+const check = (cond, m) => { checks++; if (!cond) { fails++; log("✗ " + m, "fail"); } $("#summary").innerHTML = `<span class="${fails ? "fail" : "pass"}">${checks - fails}/${checks} checks passed</span>`; };
+
+// ---------------------------------------------------------- fake platform
+let skew = 0;
+const now = () => Date.now() + skew;
+let themeId = "classic";
+let theme = getTheme(themeId);
+applyTheme(theme);
+const db = {
+  state: { ...initialState(), phase: "lobby" },
+  secret: {},
+  private: {},
+  players: {
+    u1: { name: "Bot Ahab", role: "p1", online: true },
+    u2: { name: "Bot Nemo", role: "p2", online: true },
+    u3: { name: "Spectator", role: "spectator", online: true },
+  },
+};
+const clone = (x) => JSON.parse(JSON.stringify(x, (k, v) => (v === null || (Array.isArray(v) && !v.length) ? undefined : v))); // Firebase-ish
+const host = createHost();
+const room = {
+  get state() { return db.state; }, get secret() { return db.secret; }, get players() { return db.players; }, get theme() { return theme; },
+  el: $("#game"),
+  setState(s) { db.state = clone(s); checkState(); renderAll(); },
+  setSecret(s) { db.secret = clone(s); },
+  setPrivate(u, k, v) { db.private[u] = { ...(db.private[u] || {}), [k]: v == null ? undefined : clone(v) }; },
+  seatOf: (u) => (["p1", "p2"].includes(db.players[u]?.role) ? db.players[u].role : null),
+  uidForSeat: (s) => Object.keys(db.players).find((k) => db.players[k].role === s) || null,
+  seatInfo() { const o = {}; for (const s of ["p1", "p2"]) { const u = this.uidForSeat(s); o[s] = u ? { uid: u, name: db.players[u].name } : null; } return o; },
+  isOnline: (u) => db.players[u]?.online !== false,
+  now,
+  sound: (n, o) => { if ($("#snd").checked) play(theme.sounds[n], o); },
+  setTheme(id) { themeId = id; theme = getTheme(id); applyTheme(theme); renderAll(); },
+  endRoom() { log("endRoom() called"); },
+};
+host.init(room);
+
+const phones = ["u1", "u2", "u3"].map((u, i) => {
+  const p = createPhone();
+  p.mount({ el: $(`#ph${i + 1} .pg`), send: (type, payload) => queueAction(u, { type, payload, ts: now() }), now, sound: () => {}, vibrate: () => {} });
+  return { u, p };
+});
+function renderAll() {
+  const s = normalizeState(db.state);
+  if (s.phase !== "lobby") host.render(db.state);
+  for (const { u, p } of phones) if (s.phase !== "lobby") p.render({ state: db.state, me: { ...db.players[u], uid: u }, priv: db.private[u] || {}, theme, players: db.players });
+}
+// actions travel through a tiny async queue like Firebase would
+function queueAction(u, a) { setTimeout(() => host.onAction(u, clone(a)), 5); }
+
+function checkState() {
+  const s = normalizeState(db.state);
+  if (s.phase !== "gameOver") check(!/"len"/.test(JSON.stringify(db.state)), "state never contains fleet positions before game over");
+}
+
+function fitTv() { const k = $("#tvbox").clientWidth / 1920; $("#tvStage").style.transform = `scale(${k})`; }
+addEventListener("resize", fitTv); fitTv();
+
+// ---------------------------------------------------------- live bots
+const rng = mulberry32(7);
+let running = false, timer = null;
+$("#speed").oninput = () => { $("#spd").textContent = $("#speed").value; };
+$("#spd").textContent = $("#speed").value;
+
+function step() {
+  if (!running) return;
+  const s = normalizeState(db.state);
+  host.tick(now());
+  if (s.phase === "lobby") { host.start(); log("start()"); }
+  else if (s.phase === "placement") {
+    for (const [u, seat] of [["u1", "p1"], ["u2", "p2"]]) if (!s.ready[seat]) { queueAction(u, { type: "placeFleet", payload: { fleet: randomFleet(rng) }, ts: now() }); log(`${seat} placeFleet`); break; }
+  } else if (s.phase === "battle") {
+    const u = s.turn === "p1" ? "u1" : "u2";
+    if (rng() < 0.07) { skew += 31000; log(`${s.turn} fell asleep → timer expiry`); host.tick(now()); }
+    else {
+      const [r, c] = botPick(s, s.turn, rng);
+      const before = s;
+      queueAction(u, { type: "fire", payload: { r, c }, ts: now() });
+      setTimeout(() => {
+        const a = normalizeState(db.state);
+        const last = a.shotLog.at(-1);
+        if (a.phase === "battle" && last) check(last.result === "miss" ? a.turn !== before.turn || a.round !== before.round : a.turn === last.by, `turn rule after ${last.result}`);
+      }, 30);
+    }
+    if (rng() < 0.15) queueAction("u3", { type: "emote", payload: { e: theme.emotes[Math.floor(rng() * 5)] }, ts: now() });
+  } else if (s.phase === "gameOver") {
+    log(`GAME OVER — ${s.winner} wins (${s.tally.p1}-${s.tally.p2})`, "pass");
+    check(s.reveal && s.reveal.p1 && s.reveal.p2, "fleets revealed at game over");
+    check(s.sunk[other(s.winner)].length === 5, "loser has 5 sunk ships");
+    if (!s.rematch.p1) queueAction("u1", { type: "rematch", ts: now() });
+    else if (!s.rematch.p2) { queueAction("u2", { type: "rematch", ts: now() }); if (rng() < 0.5) room.setTheme(themeId === "classic" ? "shit" : "classic"); }
+  }
+  timer = setTimeout(step, +$("#speed").value);
+}
+$("#run").onclick = () => { unlockAudio(); if (!running) { running = true; step(); } };
+$("#pause").onclick = () => { running = false; clearTimeout(timer); };
+$("#theme").onclick = () => room.setTheme(themeId === "classic" ? "shit" : "classic");
+$("#fast").onclick = () => {
+  const t0 = performance.now();
+  const r = simulate({ games: 100, seed: Date.now() % 100000 });
+  log(`headless: ${r.stats.games} games, ${r.stats.shots} shots (${r.stats.autoShots} auto, ${r.stats.bonusShots} bonus) in ${Math.round(performance.now() - t0)}ms — ${r.ok ? "ALL INVARIANTS HELD" : "FAILURES: " + [...new Set(r.failures)].join("; ")}`, r.ok ? "pass" : "fail");
+  check(r.ok, "headless simulation");
+};
+if (new URLSearchParams(location.search).has("auto")) { $("#speed").value = 40; running = true; step(); }
+window.__harness = { db, get checks() { return checks; }, get fails() { return fails; } };
+</script>
+</body>
+</html>
