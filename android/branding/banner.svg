@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d2a52"/><stop offset=".55" stop-color="#06142b"/><stop offset=".56" stop-color="#3b2611"/><stop offset="1" stop-color="#1f1408"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#g)"/>
+  <g stroke="#ffffff" stroke-opacity=".08" stroke-width="2">
+    <path d="M0 60H640M0 120H640M0 180H640M0 240H640M0 300H640M64 0V360M128 0V360M192 0V360M256 0V360M320 0V360M384 0V360M448 0V360M512 0V360M576 0V360"/>
+  </g>
+  <text x="320" y="182" text-anchor="middle" font-family="DejaVu Sans" font-weight="bold" font-size="82" fill="#000" fill-opacity=".45">BATTLESHITS</text>
+  <text x="320" y="176" text-anchor="middle" font-family="DejaVu Sans" font-weight="bold" font-size="82" fill="#ffd166">BATTLESHITS</text>
+  <text x="320" y="236" text-anchor="middle" font-family="DejaVu Sans" font-size="30" fill="#e8eef5">phone-controlled party game</text>
+  <circle cx="560" cy="80" r="34" fill="none" stroke="#e63946" stroke-width="7"/>
+  <path d="M560 34V58M560 102V126M514 80H538M582 80H606" stroke="#e63946" stroke-width="7"/>
+  <rect x="70" y="270" width="200" height="34" rx="17" fill="#8d99a6"/>
+  <rect x="370" y="270" width="200" height="34" rx="17" fill="#6b3e1a"/>
+</svg>

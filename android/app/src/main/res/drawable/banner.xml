@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fallback TV banner (320x180dp). CI replaces it with a rendered PNG that has the title text. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp" android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#06142B" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#3B2611" android:pathData="M200,0h120v180h-180z" />
+    <path android:fillColor="#8D99A6" android:pathData="M30,110h110a14,14 0 0 1 0,28h-110a14,14 0 0 1 0,-28z" />
+    <path android:fillColor="#6B3E1A" android:pathData="M190,110h90a14,14 0 0 1 0,28h-90a14,14 0 0 1 0,-28z" />
+    <path android:strokeColor="#E63946" android:strokeWidth="6" android:fillColor="#00000000" android:pathData="M160,30a32,32 0 1 1 -0.01,0z" />
+    <path android:strokeColor="#E63946" android:strokeWidth="6" android:pathData="M160,18v24M160,82v24M128,62h-24M192,62h24" />
+    <path android:fillColor="#FFD166" android:pathData="M160,54a8,8 0 1 1 -0.01,0z" />
+</vector>

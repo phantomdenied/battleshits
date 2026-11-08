@@ -1,0 +1,71 @@
+name: Android TV APK
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Restore stable signing key
+        if: env.KEYSTORE_B64 != ''
+        run: echo "$KEYSTORE_B64" | base64 -d > android/app/stable.keystore
+
+      - name: Render TV banner PNG (title text) from SVG
+        run: |
+          set -e
+          if command -v rsvg-convert >/dev/null 2>&1 || sudo apt-get install -y -qq librsvg2-bin >/dev/null 2>&1; then
+            mkdir -p android/app/src/main/res/drawable-xhdpi
+            rsvg-convert -w 640 -h 360 android/branding/banner.svg -o android/app/src/main/res/drawable-xhdpi/banner.png
+            rm android/app/src/main/res/drawable/banner.xml
+            echo "Banner rendered"
+          else
+            echo "rsvg-convert unavailable; keeping vector banner"
+          fi
+
+      - name: Version from tag
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"; else echo "name=0.0.0-dev" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Build debug APK
+        working-directory: android
+        run: gradle --no-daemon assembleDebug -PversionName=${{ steps.ver.outputs.name }} -PversionCode=${{ github.run_number }}
+
+      - name: Collect APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk battleshits-tv.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: battleshits-tv
+          path: battleshits-tv.apk
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: battleshits-tv.apk
+          make_latest: "true"
+          body: |
+            Battleshits TV wrapper ${{ github.ref_name }} for Google TV / Android TV.
+            Direct download: https://github.com/${{ github.repository }}/releases/latest/download/battleshits-tv.apk
+            See the README for sideloading steps.

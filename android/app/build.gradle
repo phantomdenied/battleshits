@@ -1,0 +1,42 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Stable signing: CI decodes the keystore from a GitHub secret into app/stable.keystore,
+// so every build has the same signature and new APKs install as updates.
+def ksFile = file('stable.keystore')
+
+android {
+    namespace 'io.github.phantomdenied.battleshits'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'io.github.phantomdenied.battleshits'
+        minSdk 26
+        targetSdk 34
+        versionCode((project.findProperty('versionCode') ?: '1') as int)
+        versionName(project.findProperty('versionName') ?: '0.1.0')
+    }
+
+    signingConfigs {
+        if (ksFile.exists()) {
+            stable {
+                storeFile ksFile
+                storePassword System.getenv('KEYSTORE_PASSWORD') ?: 'battleshits'
+                keyAlias 'battleshits'
+                keyPassword System.getenv('KEYSTORE_PASSWORD') ?: 'battleshits'
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            if (ksFile.exists()) signingConfig signingConfigs.stable
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
