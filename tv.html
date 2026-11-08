@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battleshits — TV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<link rel="stylesheet" href="tv.css">
+</head>
+<body class="tv">
+<div id="stage">
+  <div id="boot" class="screen center"><h1 class="bs-title">Battleshits</h1><p id="bootMsg">Setting up the room…</p><p id="err" hidden></p></div>
+
+  <div id="lobby" class="screen" hidden>
+    <div class="lob-left">
+      <h1 class="bs-title">Battleshits</h1>
+      <div class="tag" id="tagline"></div>
+      <div class="join-box panel">
+        <div class="qr" id="qr"></div>
+        <div class="codebox">
+          <div class="lbl">Room code</div>
+          <div class="code" id="code">····</div>
+          <div class="lbl" style="margin-top:14px">Scan, or open</div>
+          <div class="url" id="url"></div>
+        </div>
+      </div>
+    </div>
+    <div class="lob-right">
+      <div class="players panel"><h2>Players</h2><ul class="plist" id="plist"></ul></div>
+      <div class="themes panel"><h2>Theme</h2><div class="theme-row" id="themeRow"></div></div>
+      <div class="start-row">
+        <button class="btn" id="startBtn" data-key="start" data-autofocus>Start</button>
+        <span class="hint" id="startHint"></span>
+        <button class="btn ghost" id="endBtn" data-key="end">End Room</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="game" class="screen" hidden></div>
+  <div id="soundHint" hidden>🔈 Press OK on the remote to turn on sound</div>
+  <footer class="ver"></footer>
+</div>
+
+<script type="module">
+import * as P from "./platform.js";
+import { THEMES, getTheme, applyTheme } from "./themes.js";
+import { play, autoUnlock, audioReady } from "./sound.js";
+import { createHost, initialState, normalizeState } from "./battleshits.js";
+
+const $ = (s) => document.querySelector(s);
+const game = createHost();
+let host = null, theme = getTheme("classic");
+
+function fit() {
+  const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+  $("#stage").style.setProperty("--k", k);
+}
+addEventListener("resize", fit);
+fit();
+document.querySelectorAll(".ver").forEach((e) => (e.textContent = `Battleshits v${P.VERSION}`));
+applyTheme(theme);
+P.spatialNav();
+
+autoUnlock(() => { $("#soundHint").hidden = true; });
+setTimeout(() => { if (!audioReady()) $("#soundHint").hidden = false; }, 2500);
+
+const sound = (name, opts) => play(theme.sounds[name], opts);
+
+function show(id) {
+  for (const s of ["#boot", "#lobby", "#game"]) $(s).hidden = s !== id;
+}
+
+function setTheme(id) {
+  if (!THEMES[id]) return;
+  host.setTheme(id);
+}
+function onTheme(id) {
+  theme = getTheme(id);
+  applyTheme(theme);
+  $("#tagline").textContent = theme.strings.tagline;
+  render();
+}
+
+async function endRoom() {
+  try { await host.endRoom(); } catch (e) { console.warn(e); }
+  location.reload();
+}
+// End Room needs two presses so a stray D-pad OK can't kill the room.
+function confirmEnd(btn) {
+  if (!btn) return endRoom();
+  if (btn.dataset.armed) return endRoom();
+  btn.dataset.armed = "1";
+  const label = btn.textContent;
+  btn.textContent = "Press again to end";
+  setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = label; } }, 3000);
+}
+
+const roomApi = {
+  get state() { return host.state; },
+  get secret() { return host.secret; },
+  get players() { return host.players; },
+  get theme() { return theme; },
+  el: $("#game"),
+  setState(s) { host.setState(s).catch((e) => console.error("setState", e)); render(); },
+  setSecret(s) { host.setSecret(s).catch((e) => console.error("setSecret", e)); },
+  setPrivate(u, k, v) { host.setPrivate(u, k, v).catch((e) => console.error("setPrivate", e)); },
+  seatOf: (u) => host.seatOf(u),
+  uidForSeat: (s) => host.uidForSeat(s),
+  seatInfo: () => host.seatInfo(),
+  isOnline: (u) => host.isOnline(u),
+  now: P.now,
+  sound,
+  setTheme,
+  endRoom: confirmEnd,
+};
+
+/* ------------------------------------------------------------ lobby view */
+function renderLobby() {
+  const prevKey = document.activeElement?.dataset?.key;
+  const players = host.players;
+  const ids = Object.keys(players).sort((a, b) => {
+    const o = { p1: 0, p2: 1, spectator: 2 };
+    return (o[players[a].role] ?? 3) - (o[players[b].role] ?? 3) || (players[a].joinedAt || 0) - (players[b].joinedAt || 0);
+  });
+  const roleLbl = { p1: "Player 1", p2: "Player 2", spectator: "Spectator" };
+  $("#plist").innerHTML = ids.length ? ids.map((id) => {
+    const p = players[id];
+    return `<li><span class="dot ${host.isOnline(id) ? "" : "off"}"></span><span class="nm">${P.esc(p.name)}</span>
+      <span class="role ${p.role}">${roleLbl[p.role] || "…"}</span>
+      <button class="btn ghost" data-act="seat" data-uid="${id}" data-key="seat-${id}">Swap</button>
+      <button class="btn ghost" data-act="kick" data-uid="${id}" data-key="kick-${id}">Kick</button></li>`;
+  }).join("") : `<li class="empty">Waiting for phones… scan the QR code to join.</li>`;
+  $("#themeRow").innerHTML = Object.values(THEMES).map((t) =>
+    `<button class="btn theme-btn ${t.id === theme.id ? "on" : ""}" data-theme="${t.id}" data-key="theme-${t.id}">${P.esc(t.name)}</button>`).join("");
+  const can = game.canStart();
+  $("#startBtn").disabled = !can;
+  const n = ids.length;
+  $("#startHint").textContent = can ? "Everyone in? Press Start." : n < 2 ? `Need 2 players (${n}/2)` : "Use Swap to fill Player 1 and Player 2";
+  const again = prevKey && document.querySelector(`[data-key="${prevKey}"]:not([disabled])`);
+  if (again) again.focus();
+  else P.focusFirst($("#lobby"));
+}
+
+$("#plist").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  if (b.dataset.act === "seat") host.cycleSeat(b.dataset.uid);
+  if (b.dataset.act === "kick") host.kick(b.dataset.uid);
+});
+$("#themeRow").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-theme]");
+  if (b) { setTheme(b.dataset.theme); sound("ready"); }
+});
+$("#startBtn").addEventListener("click", () => game.start());
+$("#endBtn").addEventListener("click", () => confirmEnd($("#endBtn")));
+
+/* ------------------------------------------------------------------ main */
+let lastPhase = null;
+function render() {
+  if (!host) return;
+  const s = normalizeState(host.state);
+  if (s.phase === "lobby") { show("#lobby"); renderLobby(); }
+  else {
+    show("#game");
+    game.render(s);
+    if (lastPhase === "lobby" || lastPhase === null) document.activeElement?.blur?.();
+  }
+  lastPhase = s.phase;
+}
+
+async function main() {
+  try {
+    await P.boot();
+    let code = await P.resumeHostedRoom();
+    if (!code) code = await P.createRoom({ game: game.id, theme: "classic", initialState: initialState() });
+    host = new P.HostRoom(code, {
+      onPlayers: () => { game.onPlayersChanged(); render(); },
+      onAction: (uid, a) => game.onAction(uid, a),
+      onSeatTransfer: (o, n, seat) => game.onSeatTransfer(o, n, seat),
+      onTheme,
+      onGone: () => location.reload(),
+    });
+    await host.open();
+    if (!host.state) host.state = initialState();
+    game.init(roomApi);
+    $("#code").textContent = code;
+    const url = P.joinUrl(code);
+    $("#url").textContent = url.replace(/^https?:\/\//, "");
+    $("#qr").innerHTML = P.qrSvg(url);
+    onTheme(host.theme || "classic");
+    setInterval(() => game.tick(P.now()), 250);
+    let amb = 0;
+    setInterval(() => {
+      amb += 1;
+      if (amb % (theme.ambienceEvery || 6) === 0) sound("ambience", { volume: 0.7 });
+    }, 1000);
+  } catch (e) {
+    console.error(e);
+    $("#bootMsg").textContent = "Couldn't connect.";
+    $("#err").hidden = false;
+    $("#err").textContent = String(e.message || e) + " — retrying in 10s";
+    setTimeout(() => location.reload(), 10000);
+  }
+}
+main();
+</script>
+</body>
+</html>

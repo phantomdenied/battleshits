@@ -1,0 +1,101 @@
+/* common.css — shared look for TV + phone. Colors/fonts come from the active
+   theme via CSS variables set by applyTheme() in themes.js. */
+:root {
+  --bg: #06142b; --bg2: #0d2a52; --water: #0f3264; --water2: #0a2347; --grid: rgba(150,190,230,.22);
+  --panel: #27313d; --panel2: #3a4654; --text: #e8eef5; --dim: #9fb2c6; --accent: #e63946; --accent2: #ffd166;
+  --hit: #e63946; --miss: #cfe3f5; --ship: #8d99a6; --shipEdge: #c3ccd6; --sunk: #4a2226; --focus: #ffd166;
+  --font-display: 'Black Ops One', Impact, sans-serif; --font-body: 'Rubik', system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-body); -webkit-font-smoothing: antialiased; overflow: hidden; }
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; }
+
+/* -------------------------------------------------------------- backgrounds */
+.bg-layer { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+body[data-bg="ocean"] { background: radial-gradient(ellipse at 50% 115%, var(--bg2) 0%, var(--bg) 70%); }
+body[data-bg="ocean"] .wave { position: absolute; left: -50%; width: 200%; height: 55%; bottom: -25%; border-radius: 45%;
+  background: radial-gradient(ellipse at center, rgba(40,110,190,.18), transparent 65%); animation: drift 18s ease-in-out infinite alternate; }
+body[data-bg="ocean"] .wave.w2 { bottom: -32%; animation-duration: 26s; animation-direction: alternate-reverse; opacity: .7; }
+body[data-bg="ocean"] .sonar { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px; border-radius: 50%;
+  border: 2px solid rgba(120,220,200,.35); animation: sonar 6s ease-out infinite; }
+@keyframes drift { from { transform: translateX(-6%) } to { transform: translateX(6%) } }
+@keyframes sonar { 0% { transform: scale(1); opacity: .9 } 70% { opacity: .1 } 100% { transform: scale(60); opacity: 0 } }
+
+body[data-bg="sewer"] { background: radial-gradient(ellipse at 50% 25%, var(--bg2) 0%, var(--bg) 75%); }
+body[data-bg="sewer"] .bubble { position: absolute; bottom: -40px; border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, rgba(255,245,215,.55), rgba(170,120,60,.18) 55%, transparent 70%);
+  border: 1px solid rgba(255,230,180,.25); animation: rise linear infinite; }
+@keyframes rise { 0% { transform: translate(0,0) } 50% { transform: translate(14px,-55vh) } 100% { transform: translate(-6px,-115vh) } }
+
+/* ---------------------------------------------------------------- controls */
+.btn { font-family: var(--font-display); letter-spacing: .04em; border: 0; border-radius: 14px; padding: .55em 1.1em; cursor: pointer;
+  background: var(--accent); color: #fff; box-shadow: 0 4px 0 rgba(0,0,0,.35); transition: transform .08s, filter .15s; }
+body[data-theme="shit"] .btn { color: #2a1a06; }
+body[data-theme="shit"] .btn.ghost { color: var(--text); }
+.btn:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.btn:disabled { filter: grayscale(.8) brightness(.7); cursor: default; }
+.btn.ghost { background: var(--panel2); color: var(--text); }
+:focus { outline: none; }
+:focus-visible, .tv :focus { outline: 6px solid var(--focus); outline-offset: 5px; }
+.panel { background: color-mix(in srgb, var(--panel) 88%, transparent); border-radius: 18px; }
+body[data-border="tp"] .panel { border: 12px solid #fbf8ef; border-image: repeating-linear-gradient(90deg, #fbf8ef 0 34px, #d9d2bd 34px 37px) 12; border-radius: 4px; }
+
+/* ------------------------------------------------------------------ boards */
+.board-wrap { position: relative; }
+.grid { position: relative; display: grid; grid-template-columns: repeat(10, 1fr); aspect-ratio: 1; border-radius: 8px; overflow: hidden;
+  background: linear-gradient(160deg, var(--water), var(--water2)); box-shadow: inset 0 0 0 2px var(--grid); container-type: inline-size; }
+.cell { position: relative; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; margin: 0;
+  background: transparent; box-shadow: inset -1px -1px 0 var(--grid); line-height: 1; z-index: 2; }
+.grid.tap .cell { cursor: pointer; }
+.grid.tap .cell.open:active, .grid.tap .cell.open:hover { background: color-mix(in srgb, var(--accent2) 30%, transparent); }
+.cell.aim { background: color-mix(in srgb, var(--accent2) 55%, transparent) !important; animation: pulse .6s infinite alternate; }
+.cell .mark { font-size: 7.4cqw; pointer-events: none; }
+.cell.miss .mark { color: var(--miss); opacity: .85; }
+.cell.hit { background: color-mix(in srgb, var(--hit) 30%, transparent); }
+.cell.sunk { background: color-mix(in srgb, var(--sunk) 75%, transparent); }
+.cell.fresh .mark { animation: pop .7s cubic-bezier(.2,1.6,.4,1); }
+.cell.fresh.miss::before { content: ""; position: absolute; inset: 15%; border-radius: 50%; border: 3px solid var(--miss); animation: ripple .9s ease-out forwards; }
+.cell.fresh.hit::before { content: ""; position: absolute; inset: -40%; border-radius: 50%; background: radial-gradient(circle, rgba(255,220,120,.9), rgba(255,90,40,.5) 40%, transparent 70%); animation: boom .8s ease-out forwards; }
+@keyframes pop { 0% { transform: scale(0) } 100% { transform: scale(1) } }
+@keyframes ripple { from { transform: scale(.3); opacity: 1 } to { transform: scale(2.4); opacity: 0 } }
+@keyframes boom { from { transform: scale(.2); opacity: 1 } to { transform: scale(1.6); opacity: 0 } }
+@keyframes pulse { from { filter: brightness(1) } to { filter: brightness(1.5) } }
+
+.shipbar { position: absolute; z-index: 1; padding: 0; border-radius: 30%/50%;
+  background: linear-gradient(180deg, var(--shipEdge), var(--ship) 45%, color-mix(in srgb, var(--ship) 70%, #000));
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.35); margin: 0; }
+.shipbar.dir-v { border-radius: 50%/30%; background: linear-gradient(90deg, var(--shipEdge), var(--ship) 45%, color-mix(in srgb, var(--ship) 70%, #000)); }
+.grid > .shipbar { transform: scale(.86); }
+.shipbar.sunk { filter: grayscale(.6) brightness(.6); }
+body[data-theme="shit"] .shipbar { border-radius: 999px;
+  background: repeating-linear-gradient(90deg, rgba(0,0,0,.18) 0 3px, transparent 3px 22%), radial-gradient(ellipse at 40% 30%, var(--shipEdge), var(--ship) 60%, #3d2209); }
+body[data-theme="shit"] .shipbar.dir-v { background: repeating-linear-gradient(180deg, rgba(0,0,0,.18) 0 3px, transparent 3px 22%), radial-gradient(ellipse at 30% 40%, var(--shipEdge), var(--ship) 60%, #3d2209); }
+.shipbar.ghost { opacity: .85; transform: none; }
+.shipbar.ghost.ok { box-shadow: 0 0 0 3px #3ddc84, 0 8px 18px rgba(0,0,0,.5); }
+.shipbar.ghost.bad { box-shadow: 0 0 0 3px #ff4d4d, 0 8px 18px rgba(0,0,0,.5); filter: saturate(.4); }
+.shipbar.wiggle { animation: wiggle .35s; }
+@keyframes wiggle { 25% { translate: -4px 0 } 75% { translate: 4px 0 } }
+
+/* toilet bowl frame */
+body[data-frame="bowl"] .board-wrap { padding: 7%; border-radius: 50% 50% 46% 46% / 44% 44% 56% 56%;
+  background: radial-gradient(ellipse at 50% 45%, #fffdf6 52%, #e4dfd0 66%, #b9b29f 100%);
+  box-shadow: 0 14px 30px rgba(0,0,0,.55), inset 0 -8px 22px rgba(0,0,0,.22), 0 0 0 3px var(--accent); }
+body[data-frame="bowl"] .grid { border-radius: 12%; box-shadow: inset 0 0 30px rgba(0,0,0,.45), inset 0 0 0 2px var(--grid); }
+
+.tracker { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .3em .9em; }
+.tracker li { white-space: nowrap; }
+.tracker li .pips { color: var(--accent2); letter-spacing: -.1em; font-size: .8em; }
+.tracker li.gone { text-decoration: line-through; text-decoration-thickness: 3px; text-decoration-color: var(--accent); opacity: .5; }
+
+.tally { display: flex; align-items: center; justify-content: center; gap: .6em; font-family: var(--font-display); }
+.tally b { font-size: 1.4em; color: var(--accent2); }
+.tally i { opacity: .5; font-style: normal; }
+
+.emote-bar { display: flex; justify-content: center; gap: 8px; }
+.emote { font-size: 30px; width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--panel2); cursor: pointer; }
+.emote:disabled { opacity: .4; }
+
+.ver { position: fixed; right: 10px; bottom: 6px; font-size: 11px; opacity: .45; z-index: 5; pointer-events: none; }

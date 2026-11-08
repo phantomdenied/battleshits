@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#06142b">
+<title>Battleshits — Controller</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="play.css">
+</head>
+<body>
+<div id="app">
+  <div class="topbar"><span class="brand">Battleshits</span><span id="who"></span></div>
+  <main id="main">
+    <form class="join panel" id="join" autocomplete="off" hidden>
+      <h1 class="title">Battleshits</h1>
+      <p class="sub" id="joinTag">Grab a phone. Sink some ships.</p>
+      <label for="code">Room code</label>
+      <input id="code" maxlength="4" inputmode="text" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="ABCD">
+      <label for="name">Your name</label>
+      <input id="name" maxlength="12" autocorrect="off" spellcheck="false" placeholder="Captain Pants">
+      <button class="btn" type="submit" id="joinBtn">Join</button>
+      <p class="err" id="joinErr"></p>
+    </form>
+    <div id="wait" class="wait" hidden></div>
+    <div id="game" hidden></div>
+    <div id="msg" class="msgscreen" hidden></div>
+  </main>
+  <footer class="ver"></footer>
+</div>
+
+<script type="module">
+import * as P from "./platform.js";
+import { getTheme, applyTheme } from "./themes.js";
+import { play, unlockAudio, autoUnlock } from "./sound.js";
+import { createPhone, normalizeState } from "./battleshits.js";
+
+const $ = (s) => document.querySelector(s);
+const LS = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }, del: (k) => { try { localStorage.removeItem(k); } catch {} } };
+document.querySelectorAll(".ver").forEach((e) => (e.textContent = `Battleshits v${P.VERSION}`));
+P.noZoom();
+autoUnlock();
+
+let theme = getTheme("classic");
+applyTheme(theme);
+let room = null, state = null, me = null, priv = {}, players = {};
+const phone = createPhone();
+const sound = (n, o) => play(theme.sounds[n], o);
+phone.mount({
+  el: $("#game"),
+  send: (type, payload) => room?.send(type, payload).catch((e) => console.error("send", e)),
+  now: P.now,
+  sound,
+  vibrate: (p) => { try { navigator.vibrate?.(p); } catch {} },
+});
+
+function show(id) { for (const s of ["#join", "#wait", "#game", "#msg"]) $(s).hidden = s !== id; }
+
+const params = new URLSearchParams(location.search);
+const urlCode = P.normalizeCode(params.get("room"));
+$("#code").value = urlCode || "";
+$("#name").value = LS.get("party.name") || "";
+$("#code").addEventListener("input", () => { $("#code").value = P.normalizeCode($("#code").value); });
+
+$("#join").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  unlockAudio();
+  P.keepAwake();
+  await doJoin(P.normalizeCode($("#code").value), P.cleanName($("#name").value));
+});
+
+async function doJoin(code, name, silent = false) {
+  $("#joinErr").textContent = "";
+  if (code.length !== 4) { $("#joinErr").textContent = "Room codes are 4 letters"; return false; }
+  if (!name) { $("#joinErr").textContent = "Enter a name"; $("#name").focus(); return false; }
+  $("#joinBtn").disabled = true;
+  try {
+    await P.boot();
+    room = new P.PlayerRoom(code, {
+      onState: (s) => { state = s; render(); },
+      onTheme: (t) => { theme = getTheme(t); applyTheme(theme); document.querySelector('meta[name="theme-color"]').content = theme.colors.bg; render(); },
+      onMe: (v) => { me = v; render(); },
+      onPrivate: (v) => { priv = v; render(); },
+      onPlayers: (v) => { players = v; render(); },
+      onKicked: () => { LS.del("party.room"); message("You were removed by the host.", true); },
+      onGone: () => { LS.del("party.room"); message("This room has ended.", true); },
+    });
+    await room.join(name);
+    LS.set("party.name", name);
+    LS.set("party.room", code);
+    if (urlCode !== code) history.replaceState(null, "", `?room=${code}`);
+    $("#who").textContent = `${code} · ${name}`;
+    return true;
+  } catch (err) {
+    console.error(err);
+    room = null;
+    if (!silent) $("#joinErr").textContent = /permission/i.test(err.message) ? "Can't join that room" : err.message;
+    show("#join");
+    return false;
+  } finally {
+    $("#joinBtn").disabled = false;
+  }
+}
+
+function message(text, offerJoin) {
+  show("#msg");
+  $("#msg").innerHTML = `<h1>${P.esc(text)}</h1>${offerJoin ? '<button class="btn huge" id="again">Join a room</button>' : ""}`;
+  $("#again")?.addEventListener("click", () => { location.href = "play.html"; });
+}
+
+function render() {
+  if (!room || !me) return;
+  const s = normalizeState(state);
+  $("#who").textContent = `${room.code} · ${me.name}`;
+  if (s.phase === "lobby") {
+    show("#wait");
+    const roleLbl = { p1: "You're Player 1", p2: "You're Player 2", spectator: "You're spectating" };
+    const list = Object.entries(players).map(([id, p]) => `<li class="${id === room.uid ? "me" : ""}">${P.esc(p.name)}${p.role !== "spectator" ? ` · ${p.role === "p1" ? "P1" : "P2"}` : ""}</li>`).join("");
+    $("#wait").innerHTML = `<h1>You're in!</h1>
+      <div class="seat-badge ${me.role}">${roleLbl[me.role] || "Joining…"}</div>
+      <p class="sub">Theme: <b>${P.esc(theme.name)}</b></p>
+      <p class="sub">Waiting for the host to start the game on the TV…</p>
+      <ul>${list}</ul>`;
+    return;
+  }
+  show("#game");
+  phone.render({ state, me: { ...me, uid: room.uid }, priv, theme, players });
+}
+
+// Auto-rejoin after a reload (same browser = same anonymous uid = same seat).
+(async () => {
+  const last = LS.get("party.room");
+  const name = LS.get("party.name");
+  const code = urlCode || last;
+  if (code && last === code && name) {
+    show("#msg");
+    $("#msg").innerHTML = "<h1>Reconnecting…</h1>";
+    const ok = await doJoin(code, name, true).catch(() => false);
+    if (ok) { document.addEventListener("pointerdown", () => { unlockAudio(); P.keepAwake(); }, { once: true }); return; }
+  }
+  show("#join");
+  if (urlCode) $("#name").focus();
+})();
+</script>
+</body>
+</html>

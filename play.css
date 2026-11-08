@@ -1,0 +1,82 @@
+/* play.css — phone controller styles */
+html, body { overscroll-behavior: none; touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+body { overflow-y: auto; font-size: 16px; }
+#app { position: relative; z-index: 1; min-height: 100dvh; display: flex; flex-direction: column; padding: max(10px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom)); }
+.topbar { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--dim); min-height: 22px; }
+.topbar .brand { font-family: var(--font-display); font-size: 18px; color: var(--text); flex: 1; }
+body[data-theme="shit"] .topbar .brand { color: var(--accent2); }
+.ver { position: static; text-align: center; margin-top: auto; padding-top: 12px; }
+main { flex: 1; display: flex; flex-direction: column; }
+h1 { font-family: var(--font-display); font-weight: 400; margin: .2em 0; text-align: center; font-size: 30px; line-height: 1.1; }
+.sub { color: var(--dim); text-align: center; margin: .3em 0; font-size: 14px; }
+.btn { font-size: 20px; }
+.btn.huge { font-size: 26px; padding: 14px 30px; align-self: center; margin-top: 10px; }
+
+/* join */
+.join { display: flex; flex-direction: column; gap: 14px; margin-top: 6vh; padding: 22px 18px; }
+.join .title { font-family: var(--font-display); font-size: 46px; text-align: center; line-height: 1; margin: 0; }
+body[data-theme="shit"] .join .title { color: var(--accent2); }
+.join label { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: .1em; }
+.join input { width: 100%; font: inherit; font-size: 24px; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--panel2); background: rgba(0,0,0,.25); color: var(--text); -webkit-user-select: text; user-select: text; }
+.join input#code { font-family: var(--font-display); font-size: 40px; letter-spacing: .3em; text-align: center; text-transform: uppercase; }
+.join input:focus { border-color: var(--accent2); outline: none; }
+.join .btn { font-size: 26px; padding: 14px; margin-top: 6px; }
+.err { color: #ff8a8a; text-align: center; min-height: 1.2em; margin: 0; }
+
+/* lobby wait */
+.wait { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 4vh; text-align: center; }
+.seat-badge { font-family: var(--font-display); font-size: 34px; padding: 14px 26px; border-radius: 18px; background: var(--accent); color: #fff; }
+body[data-theme="shit"] .seat-badge { color: #2a1a06; }
+.seat-badge.spectator { background: var(--panel2); color: var(--text); }
+.wait ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.wait li { background: var(--panel2); padding: 6px 12px; border-radius: 999px; font-size: 15px; }
+.wait li.me { outline: 2px solid var(--accent2); }
+
+/* placement */
+.pl, .pw, .pb, .sp, .po { display: flex; flex-direction: column; gap: 10px; }
+.ph-head h1 { font-size: 26px; }
+.pl-board { width: min(100%, 56dvh, 460px); align-self: center; }
+.pl-board .grid { touch-action: none; }
+.shipbar.placeable { cursor: grab; touch-action: none; z-index: 3; }
+.shipbar .lbl { display: none; }
+.tray { display: flex; flex-wrap: wrap; gap: 10px 14px; justify-content: center; min-height: 60px; align-items: center; }
+.tray-ship { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; color: var(--dim); }
+.tray-ship .shipbar { touch-action: none; cursor: grab; }
+.tray-done { color: var(--dim); font-size: 13px; margin: 0; text-align: center; }
+.msg { text-align: center; min-height: 1.2em; margin: 0; font-size: 14px; color: var(--dim); }
+.msg.bad { color: #ff8a8a; }
+.ph-actions { display: flex; gap: 12px; justify-content: center; }
+.ph-actions .btn { flex: 1; max-width: 220px; padding: 14px 10px; white-space: nowrap; }
+.board-wrap.mid { width: min(84%, 42dvh, 380px); align-self: center; }
+
+/* battle */
+.pb-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 14px; background: var(--panel2); font-weight: 800; }
+.pb.mine .pb-status { background: var(--accent); color: #fff; animation: pulse .9s infinite alternate; }
+body[data-theme="shit"] .pb.mine .pb-status { color: #2a1a06; }
+.pb-status .t { font-size: 17px; }
+.pb-status .timer { font-family: var(--font-display); font-size: 22px; min-width: 2.5em; text-align: right; }
+.pb-status .timer.low { color: #fff; text-shadow: 0 0 8px #f00; }
+.pb-enemy .board-wrap { width: min(100%, 54dvh, 480px); margin: 0 auto; }
+.pb.theirs .pb-enemy .grid { filter: saturate(.6) brightness(.85); }
+.pb-label { text-align: center; font-size: 12px; color: var(--dim); margin-top: 3px; }
+.pb-bottom { display: flex; gap: 12px; align-items: flex-start; }
+.pb-own { width: 44%; max-width: 220px; flex: none; }
+.pb-track { flex: 1; font-size: 13px; }
+.pb-track .tracker { flex-direction: column; gap: 4px; }
+.grid .cell { font-size: inherit; }
+
+/* spectator */
+.badge { align-self: center; background: var(--panel2); padding: 4px 14px; border-radius: 999px; font-size: 13px; }
+.sp .tally { font-size: 20px; }
+.sp-boards { display: flex; gap: 10px; }
+.sp-side { flex: 1; min-width: 0; }
+
+/* game over */
+.po h1.big { font-size: 46px; color: var(--accent2); animation: pop .8s cubic-bezier(.2,1.6,.4,1); }
+.po.lost h1.big { color: var(--accent); }
+body[data-theme="shit"] .po.lost h1.big { color: #c58b4a; text-shadow: 0 0 20px #000; }
+.po .tally { font-size: 22px; }
+
+.emote-bar { margin-top: 6px; flex-wrap: wrap; }
+.emote { width: 52px; height: 52px; font-size: 28px; }
+.msgscreen { text-align: center; margin-top: 15vh; display: flex; flex-direction: column; gap: 16px; align-items: center; }
