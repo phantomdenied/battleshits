@@ -3,6 +3,7 @@
 import * as C4 from "../connect4.js";
 import * as HM from "../hangman.js";
 import * as BJ from "../blackjack.js";
+import * as TQ from "../trivia.js";
 
 let fails = 0, checks = 0;
 const ok = (cond, msg) => { checks++; if (!cond) { fails++; console.error("FAIL:", msg); } };
@@ -166,6 +167,67 @@ const seated = (n) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`p
   const final = Object.values(s.table).reduce((a, p) => a + p.chips + p.hands.reduce((b, h) => b + (h.result ? 0 : h.bet), 0), 0);
   ok(final === 4 * BJ.START_CHIPS + bailIn - houseNet, `bj sim: chips conserved (${final} vs ${4 * BJ.START_CHIPS + bailIn - houseNet})`);
   console.log(`blackjack: ${hands} hands, house net ${houseNet}, bailouts paid ${bailIn}`);
+}
+
+
+/* ---------------------------------------------------------------- Trivia */
+{
+  for (const b of TQ.BANK) {
+    const [q, c, ...w] = b;
+    ok(w.length === 3 || (w.length === 1 && ["True", "False"].includes(c) && ["True", "False"].includes(w[0]) && c !== w[0]), "tq bank shape: " + q);
+    ok(new Set([c, ...w]).size === w.length + 1, "tq bank unique answers: " + q);
+  }
+  ok(new Set(TQ.BANK.map((b) => b[0])).size === TQ.BANK.length, "tq bank: no duplicate questions");
+  const qs = TQ.fromBank(10, rng);
+  ok(qs.length === 10 && qs.every((q) => q.answers[q.correct] !== undefined), "tq: fromBank builds questions");
+  ok(qs.filter((q) => q.answers.length === 2).every((q) => q.answers[0] === "True"), "tq: true/false keeps True first");
+  const enc = (o) => ({ ...o, question: encodeURIComponent(o.question), correct_answer: encodeURIComponent(o.correct_answer), incorrect_answers: o.incorrect_answers.map(encodeURIComponent), category: encodeURIComponent(o.category) });
+  ok(TQ.kidSafe(enc({ category: "Animals", question: "What do cows drink?", correct_answer: "Water", incorrect_answers: ["Milk", "Juice", "Soda"] })), "tq: kid-safe question allowed");
+  ok(!TQ.kidSafe(enc({ category: "Entertainment: Music", question: "Who sang?", correct_answer: "A", incorrect_answers: ["B", "C", "D"] })), "tq: Music blocked in kids mode");
+  ok(!TQ.kidSafe(enc({ category: "History", question: "Who won?", correct_answer: "A", incorrect_answers: ["B", "C", "D"] })), "tq: History blocked in kids mode");
+  ok(!TQ.kidSafe(enc({ category: "Entertainment: Film", question: "Which beer brand...", correct_answer: "A", incorrect_answers: ["B", "C", "D"] })), "tq: word filter");
+  ok(!TQ.kidSafe(enc({ category: "Entertainment: Video Games", question: "Who founded Team Fortress 2's Mann Co?", correct_answer: "A", incorrect_answers: ["B", "C", "D"] })), "tq: mature title filter");
+  ok(TQ.kidSafe(enc({ category: "Entertainment: Video Games", question: "What is the name of Mario's brother?", correct_answer: "Luigi", incorrect_answers: ["Wario", "Toad", "Yoshi"] })), "tq: Mario allowed");
+  // game flow
+  let s = TQ.openSetup(TQ.initialState(), seated(3), 0);
+  ok(s.phase === "setup" && Object.keys(s.scores).length === 3, "tq: setup with 3 players");
+  s = TQ.beginLoading(s, { level: "easy", count: 10 }, 1);
+  s = TQ.startQuiz(s, qs, 1000);
+  ok(s.phase === "question" && s.qn === 1 && !("correct" in s.q), "tq: question 1, answer hidden from state");
+  let picks = {};
+  let r = TQ.answer(s, picks, "p1", qs[0].correct, 1000); s = r.state; picks = r.picks;
+  ok(TQ.answer(s, picks, "p1", 0, 1100).error, "tq: can't answer twice");
+  r = TQ.answer(s, picks, "p2", (qs[0].correct + 1) % qs[0].answers.length, 15000); s = r.state; picks = r.picks;
+  ok(!TQ.allAnswered(s), "tq: not everyone answered");
+  r = TQ.answer(s, picks, "p3", qs[0].correct, 1000 + TQ.turnMs(s) / 2); s = r.state; picks = r.picks;
+  ok(TQ.allAnswered(s), "tq: everyone answered");
+  s = TQ.reveal(s, picks, qs[0].correct, 9000);
+  ok(s.scores.p1 === 1000 && s.scores.p2 === 0 && s.scores.p3 === 750, `tq: speed scoring (${s.scores.p1}, ${s.scores.p2}, ${s.scores.p3})`);
+  for (let i = 0; i < 9; i++) { s = TQ.next(s, qs, 10000 + i); s = TQ.reveal(s, {}, qs[s.qn - 1].correct, 10000 + i); }
+  s = TQ.next(s, qs, 20000);
+  ok(s.phase === "gameOver" && TQ.ranking(s)[0] === "p1", "tq: game over after 10 questions, p1 leads");
+  ok(TQ.syncPlayers(s, { ...seated(3), p4: { name: "Late" } }).scores.p4 === 0, "tq: late joiner added with 0");
+  // fetch fallbacks (fake network)
+  const noWait = async () => {};
+  const fake = (responses) => { let i = 0; return async () => ({ json: async () => responses[Math.min(i++, responses.length - 1)] }); };
+  const api = (n) => ({ response_code: 0, results: Array.from({ length: n }, (_, i) => enc({ type: "multiple", difficulty: "easy", category: i % 2 ? "Animals" : "Politics", question: "Q" + i + "?", correct_answer: "A" + i, incorrect_answers: ["B", "C", "D"] })) });
+  let f = await TQ.fetchQuestions({ level: "easy", cat: "any", count: 10 }, { fetchFn: fake([{ response_code: 5 }, api(10)]), wait: noWait, rng });
+  ok(f.questions.length === 10 && f.source === "opentdb", "tq: retries after rate limit");
+  f = await TQ.fetchQuestions({ level: "hard", cat: 9, count: 15 }, { fetchFn: async () => { throw new Error("offline"); }, wait: noWait, rng });
+  ok(f.questions.length === 15 && f.source === "bank", "tq: offline falls back to built-in questions");
+  f = await TQ.fetchQuestions({ level: "kids", cat: "any", count: 10 }, { fetchFn: fake([api(50)]), wait: noWait, rng });
+  ok(f.questions.length === 10 && f.questions.every((q) => q.category !== "Politics"), "tq: kids mode drops non-kid categories");
+  // real network (skipped when offline)
+  if (!process.env.OFFLINE) {
+    const t0 = Date.now();
+    const live = await TQ.fetchQuestions({ level: "kids", cat: "any", count: 15 }, { rng });
+    console.log(`trivia live kids: ${live.questions.length} questions from ${live.source} in ${Date.now() - t0}ms; e.g. "${live.questions.find((q) => q.category !== "Kids' Trivia")?.text}"`);
+    ok(live.questions.length === 15, "tq live: kids returns 15");
+    await new Promise((r) => setTimeout(r, 5500));
+    const hard = await TQ.fetchQuestions({ level: "hard", cat: 22, count: 10 }, { rng });
+    console.log(`trivia live hard geography: ${hard.questions.length} from ${hard.source}; e.g. "${hard.questions[0].text}" -> ${hard.questions[0].answers[hard.questions[0].correct]}`);
+    ok(hard.questions.length === 10, "tq live: hard geography returns 10");
+  }
 }
 
 console.log(fails ? `\n${fails} of ${checks} checks FAILED` : `\nALL ${checks} CHECKS PASSED`);

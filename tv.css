@@ -1,5 +1,6 @@
 /* tv.css — TV host/display styles */
 /* The TV is laid out on a fixed 1920x1080 stage, scaled to fit any screen. */
+html:has(body.tv) { overflow: hidden; }
 #stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform: translate(-50%, -50%) scale(var(--k, 1)); z-index: 1; font-size: 32px; }
 .screen { position: absolute; inset: 0; padding: 54px 96px; } /* 5% TV-safe margins */
 .center { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }

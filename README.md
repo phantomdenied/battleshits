@@ -7,6 +7,7 @@ Jackbox-style party games for the TV. The TV (an onn Google TV stick, or any bro
 | 🚢 **Battleshits** | 2 | Battleship: hide your fleet, take turns firing |
 | 🔴 **Connect 4** (Connect Plop) | 2 | Drop discs, four in a row wins |
 | 🔤 **Hangman** (Flushman) | 2–8 | Take turns setting a word; everyone else guesses |
+| ❓ **Trivia** (Brain Dump) | 1–8 | Multiple-choice quiz, with a family-friendly **Kids (10+)** level |
 | 🃏 **Blackjack** (Crapjack) | 1–6 | Everyone against the TV dealer |
 
 **Play now**
@@ -34,6 +35,11 @@ Jackbox-style party games for the TV. The TV (an onn Google TV stick, or any bro
 **Connect 4:** tap a column on your phone to drop a disc. 20 seconds per move (the TV drops one for you if you're too slow). The first player alternates each round, and both players tap **Play again** for a rematch.
 
 **Hangman:** everyone sets one word per game, in turn. The setter types a word or phrase (up to 4 words) on their phone, or taps 🎲 **Random**. Everyone else takes turns: tap a letter, or tap **I know it — solve** to guess the whole thing. A correct letter keeps your turn; a wrong letter or wrong solve is a strike and passes the turn; 6 strikes and the setter wins the round. Scoring: +1 per letter revealed, +3 for finishing the word, +2 per hidden letter for a correct solve. The setter gets +1 per wrong guess and +3 if nobody gets it. 25 seconds per turn (running out passes the turn without a strike).
+
+**Trivia:** on the TV, use the remote to pick a **Level** (Kids (10+), Easy, Medium, Hard or Mixed), a **Category** and 10, 15 or 20 questions, then press **Let's play!**. Each question shows on the TV with four colored answers (▲◆●■), or True/False; tap the matching tile on your phone. A right answer scores 500 points plus up to 500 more for speed. After everyone answers (or time runs out) the TV shows the answer, who picked what, and the leaderboard. New phones can join between questions.
+
+* **Kids (10+)** uses 25-second timers, only kid-friendly categories, a built-in bank of 105 hand-written questions, and easy questions from Open Trivia DB filtered for mature topics and franchises. At most half of a Kids quiz comes from Open Trivia DB. The filtering is best-effort, so an odd question can still slip through.
+* Questions come from [Open Trivia DB](https://opentdb.com/) (CC BY-SA 4.0; credited on the game-over screen). If it can't be reached, the quiz uses the built-in bank. Questions are in English.
 
 **Blackjack:** everyone starts with 1000 chips. Pick a bet ($10–$500) with the chip buttons and tap **Bet**; the TV deals once everyone has bet, or after 25 seconds. On your turn: **Hit**, **Stand**, **Double** (first two cards) or **Split** (a pair, once). Dealer stands on 17, blackjack pays 3:2, and anyone who goes broke gets a 500-chip bailout. New phones can join between hands. 20 seconds per decision (running out stands).
 
@@ -66,9 +72,9 @@ No build step, no framework, no npm. Plain HTML, CSS and JS modules, with librar
 | `tv.html` / `tv.css` | TV host and display: lobby, D-pad navigation, runs the authoritative game |
 | `play.html` / `play.css` | Phone controller: join, placement, battle, spectator, game over |
 | `games.js` | The list of games the TV offers (add a game here) |
-| `connect4.js`, `hangman.js`, `blackjack.js` | The other game modules, same shape as `battleshits.js` |
+| `connect4.js`, `hangman.js`, `trivia.js`, `blackjack.js` | The other game modules, same shape as `battleshits.js` |
 | `kit.js` | Shared helpers for game modules: TV layers, emotes, timer ring, between-round controls |
-| `games.css` | Styles for Connect 4, Hangman and Blackjack |
+| `games.css` | Styles for Connect 4, Hangman, Trivia and Blackjack |
 | `platform.js` | **Game-agnostic** platform: rooms, anonymous auth, presence, seats, reconnect-by-name, action queue, server clock, wake lock, QR, spatial nav |
 | `battleshits.js` | The game module: pure rules engine, TV views (`createHost`) and phone views (`createPhone`) |
 | `themes.js` | One config block per theme: colors, fonts, ship names, sound recipes, strings, emotes, background |
@@ -77,7 +83,7 @@ No build step, no framework, no npm. Plain HTML, CSS and JS modules, with librar
 | `database.rules.json` | Realtime Database security rules |
 | `dev/harness.html` | Dev-only: plays full games with simulated players on the real TV and phone views, without Firebase |
 | `dev/engine.test.mjs` | `node dev/engine.test.mjs`: Battleshits rules tests plus a 300-game simulation |
-| `dev/games.test.mjs` | `node dev/games.test.mjs`: rules tests and simulations for Connect 4, Hangman and Blackjack |
+| `dev/games.test.mjs` | `node dev/games.test.mjs`: rules tests and simulations for Connect 4, Hangman, Trivia and Blackjack (`OFFLINE=1` skips live Open Trivia DB fetches) |
 | `android/` | Android TV wrapper (WebView) built by GitHub Actions |
 
 ### Architecture
@@ -115,7 +121,7 @@ Copy one of the blocks in `themes.js`, give it a new key and `id`, and change th
 
 ```bash
 node dev/engine.test.mjs                 # Battleshits rules tests + 300 simulated games
-node dev/games.test.mjs                  # Connect 4, Hangman, Blackjack rules tests + simulations
+node dev/games.test.mjs                  # Connect 4, Hangman, Trivia, Blackjack rules tests + simulations
 ```
 Serve the folder with any static server and open `dev/harness.html` (add `?auto` to start automatically) to watch bots play on the real TV and phone views.
 

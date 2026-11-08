@@ -69,6 +69,11 @@ function fit() {
 }
 addEventListener("resize", fit);
 fit();
+// The stage is laid out at 1920x1080 and scaled down, so focusing a button can
+// make the browser scroll the page to "reveal" it. Keep the page pinned.
+const pin = () => { if (scrollX || scrollY) scrollTo(0, 0); for (const el of [document.documentElement, document.body]) { el.scrollTop = 0; el.scrollLeft = 0; } };
+addEventListener("scroll", pin, { passive: true });
+document.addEventListener("focusin", () => requestAnimationFrame(pin));
 document.querySelectorAll(".ver").forEach((e) => (e.textContent = `Battleshits v${P.VERSION}`));
 applyTheme(theme);
 P.spatialNav();
