@@ -284,6 +284,7 @@ export function createHost() {
     },
     minPlayers: 2,
     canStart() { const s = room.seatInfo(); return !!(s.p1 && s.p2); },
+    startHint() { return "Use Swap to fill Player 1 and Player 2"; },
     canChangeTheme(state) { return state.phase === "lobby" || state.phase === "gameOver"; },
     start() {
       if (!mod.canStart()) return;
@@ -442,11 +443,12 @@ export function createHost() {
           <div class="bs-boards">${side("p1")}${side("p2")}</div>
           ${tally}
           <div class="rm-row">${rm("p1")}${rm("p2")}</div>
-          <div class="over-ctl"><span class="lbl">Next round theme:</span>${themeBtns}<button class="btn ghost" data-act="end" data-key="end">End Room</button></div>
+          <div class="over-ctl"><span class="lbl">Next round theme:</span>${themeBtns}<button class="btn ghost" data-act="lobby" data-key="lobby">Change game</button><button class="btn ghost" data-act="end" data-key="end">End Room</button></div>
         </div>`;
         const prevKey = document.activeElement?.dataset?.key;
         screen.querySelectorAll("[data-theme]").forEach((b) => b.addEventListener("click", () => room.setTheme(b.dataset.theme)));
         screen.querySelector('[data-act="end"]').addEventListener("click", (e) => room.endRoom(e.currentTarget));
+        screen.querySelector('[data-act="lobby"]').addEventListener("click", (e) => room.toLobby(e.currentTarget));
         const again = prevKey && screen.querySelector(`[data-key="${prevKey}"]`);
         (again || screen.querySelector(".theme-btn.on")).focus();
       }
@@ -770,6 +772,7 @@ export function createPhone() {
 
   return {
     mount(c) { ctx = c; },
+    unmount() { clearInterval(timerInt); cancelDrag(); mode = null; },
     render(view) {
       v = view;
       const el = ctx.el;

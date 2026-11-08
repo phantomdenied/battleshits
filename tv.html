@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="common.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <link rel="stylesheet" href="tv.css">
+<link rel="stylesheet" href="games.css">
 </head>
 <body class="tv">
 <div id="stage">
@@ -28,6 +29,7 @@
           <div class="url" id="url"></div>
         </div>
       </div>
+      <div class="games panel"><h2>Game</h2><div class="game-row" id="gameRow"></div></div>
     </div>
     <div class="lob-right">
       <div class="players panel"><h2>Players</h2><ul class="plist" id="plist"></ul></div>
@@ -41,6 +43,7 @@
   </div>
 
   <div id="game" class="screen" hidden></div>
+  <div id="menu" hidden><button class="btn ghost" id="menuLobby" data-key="menu-lobby">⏏ Change game</button><button class="btn ghost" id="menuClose" data-key="menu-close">Keep playing</button></div>
   <div id="soundHint" hidden>🔈 Press OK on the remote to turn on sound</div>
   <footer class="ver"></footer>
 </div>
@@ -49,10 +52,12 @@
 import * as P from "./platform.js";
 import { THEMES, getTheme, applyTheme } from "./themes.js";
 import { play, autoUnlock, audioReady } from "./sound.js";
-import { createHost, initialState, normalizeState } from "./battleshits.js";
+import { GAMES, gameId, freshState } from "./games.js";
+import { seatLabel } from "./kit.js";
 
 const $ = (s) => document.querySelector(s);
-const game = createHost();
+const hostMods = {};
+let game = null, gameKey = null;
 let host = null, theme = getTheme("classic");
 
 function fit() {
@@ -84,8 +89,46 @@ function setTheme(id) {
 function onTheme(id) {
   theme = getTheme(id);
   applyTheme(theme);
-  $("#tagline").textContent = theme.strings.tagline;
+  $("#tagline").textContent = "Party games on the TV. Phones are the controllers.";
   render();
+}
+
+/** Make the module for this state's game the active one (re-inits the game DOM). */
+function activate(id) {
+  if (gameKey === id && game) return;
+  gameKey = id;
+  game = hostMods[id] || (hostMods[id] = GAMES[id].mod.createHost());
+  game.init(roomApi);
+  lastRenderMemo = null;
+  const g = GAMES[id];
+  host.setSeats(g.seats, { joinMidGame: !!g.joinMidGame, fill: host.state?.phase === "lobby" }).catch((e) => console.warn("seats", e));
+}
+function selectGame(id) {
+  if (!GAMES[id] || host.state?.phase !== "lobby" || id === gameKey) return;
+  host.state = freshState(id);
+  activate(id);
+  host.setState(host.state).catch((e) => console.error("setState", e));
+  sound("ready");
+  render();
+}
+async function backToLobby() {
+  host.state = freshState(gameKey);
+  await host.setState(host.state).catch((e) => console.error("setState", e));
+  host.setSeats(GAMES[gameKey].seats, { joinMidGame: !!GAMES[gameKey].joinMidGame, fill: true }).catch(() => {});
+  render();
+}
+// Two presses within 3s (survives the button being redrawn in between).
+let armed = null;
+function twoPress(btn, fn, prompt) {
+  const key = btn?.dataset?.key || prompt;
+  if (!btn || (armed && armed.key === key && Date.now() < armed.until)) { armed = null; return fn(); }
+  armed = { key, until: Date.now() + 3000 };
+  const label = btn.textContent;
+  btn.textContent = prompt;
+  setTimeout(() => {
+    const b = document.querySelector(`[data-key="${key}"]`);
+    if (b && b.textContent === prompt) b.textContent = label;
+  }, 3000);
 }
 
 async function endRoom() {
@@ -93,14 +136,7 @@ async function endRoom() {
   location.reload();
 }
 // End Room needs two presses so a stray D-pad OK can't kill the room.
-function confirmEnd(btn) {
-  if (!btn) return endRoom();
-  if (btn.dataset.armed) return endRoom();
-  btn.dataset.armed = "1";
-  const label = btn.textContent;
-  btn.textContent = "Press again to end";
-  setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = label; } }, 3000);
-}
+function confirmEnd(btn) { twoPress(btn, endRoom, "Press again to end"); }
 
 const roomApi = {
   get state() { return host.state; },
@@ -119,6 +155,7 @@ const roomApi = {
   sound,
   setTheme,
   endRoom: confirmEnd,
+  toLobby: (btn) => twoPress(btn, backToLobby, "Press again"),
 };
 
 /* ------------------------------------------------------------ lobby view */
@@ -126,23 +163,25 @@ function renderLobby() {
   const prevKey = document.activeElement?.dataset?.key;
   const players = host.players;
   const ids = Object.keys(players).sort((a, b) => {
-    const o = { p1: 0, p2: 1, spectator: 2 };
-    return (o[players[a].role] ?? 3) - (o[players[b].role] ?? 3) || (players[a].joinedAt || 0) - (players[b].joinedAt || 0);
+    const o = (r) => (r === "spectator" ? 99 : Number(String(r).slice(1)) || 98);
+    return o(players[a].role) - o(players[b].role) || (players[a].joinedAt || 0) - (players[b].joinedAt || 0);
   });
-  const roleLbl = { p1: "Player 1", p2: "Player 2", spectator: "Spectator" };
+
   $("#plist").innerHTML = ids.length ? ids.map((id) => {
     const p = players[id];
     return `<li><span class="dot ${host.isOnline(id) ? "" : "off"}"></span><span class="nm">${P.esc(p.name)}</span>
-      <span class="role ${p.role}">${roleLbl[p.role] || "…"}</span>
+      <span class="role ${p.role === "spectator" ? "spectator" : "seat"}">${seatLabel(p.role)}</span>
       <button class="btn ghost" data-act="seat" data-uid="${id}" data-key="seat-${id}">Swap</button>
       <button class="btn ghost" data-act="kick" data-uid="${id}" data-key="kick-${id}">Kick</button></li>`;
   }).join("") : `<li class="empty">Waiting for phones… scan the QR code to join.</li>`;
+  $("#gameRow").innerHTML = Object.entries(GAMES).map(([id, g]) =>
+    `<button class="btn game-btn ${id === gameKey ? "on" : ""}" data-game="${id}" data-key="game-${id}"><span class="gi">${g.icon}</span><span class="gn">${P.esc(g.name)}</span><span class="gb">${P.esc(g.blurb)}</span></button>`).join("");
   $("#themeRow").innerHTML = Object.values(THEMES).map((t) =>
     `<button class="btn theme-btn ${t.id === theme.id ? "on" : ""}" data-theme="${t.id}" data-key="theme-${t.id}">${P.esc(t.name)}</button>`).join("");
   const can = game.canStart();
   $("#startBtn").disabled = !can;
   const n = ids.length;
-  $("#startHint").textContent = can ? "Everyone in? Press Start." : n < 2 ? `Need 2 players (${n}/2)` : "Use Swap to fill Player 1 and Player 2";
+  $("#startHint").textContent = can ? "Everyone in? Press Start." : n === 0 ? "Waiting for phones to join" : (game.startHint?.() || "Not enough players");
   const again = prevKey && document.querySelector(`[data-key="${prevKey}"]:not([disabled])`);
   if (again) again.focus();
   else P.focusFirst($("#lobby"));
@@ -154,22 +193,47 @@ $("#plist").addEventListener("click", (e) => {
   if (b.dataset.act === "seat") host.cycleSeat(b.dataset.uid);
   if (b.dataset.act === "kick") host.kick(b.dataset.uid);
 });
+$("#gameRow").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-game]");
+  if (b) selectGame(b.dataset.game);
+});
 $("#themeRow").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-theme]");
   if (b) { setTheme(b.dataset.theme); sound("ready"); }
 });
 $("#startBtn").addEventListener("click", () => game.start());
+
+// In-game menu: any remote key while nothing is focused shows it for a few seconds.
+let menuTimer = null;
+function hideMenu() { $("#menu").hidden = true; clearTimeout(menuTimer); if ($("#menu").contains(document.activeElement)) document.activeElement.blur(); }
+function showMenu() {
+  $("#menu").hidden = false;
+  $("#menuLobby").focus();
+  clearTimeout(menuTimer);
+  menuTimer = setTimeout(hideMenu, 6000);
+}
+addEventListener("keydown", (e) => {
+  if ($("#game").hidden) return;
+  if (!$("#menu").hidden) { clearTimeout(menuTimer); menuTimer = setTimeout(hideMenu, 6000); return; }
+  const f = document.activeElement;
+  if (f && f !== document.body && $("#game").contains(f)) return; // a game screen with its own buttons
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " ", "ContextMenu", "Escape"].includes(e.key)) { e.preventDefault(); e.stopPropagation(); showMenu(); }
+}, true);
+$("#menuLobby").addEventListener("click", (e) => twoPress(e.currentTarget, () => { hideMenu(); backToLobby(); }, "Press again"));
+$("#menuClose").addEventListener("click", hideMenu);
 $("#endBtn").addEventListener("click", () => confirmEnd($("#endBtn")));
 
 /* ------------------------------------------------------------------ main */
-let lastPhase = null;
+let lastPhase = null, lastRenderMemo = null;
 function render() {
   if (!host) return;
-  const s = normalizeState(host.state);
+  activate(gameId(host.state));
+  const s = GAMES[gameKey].mod.normalizeState(host.state);
   if (s.phase === "lobby") { show("#lobby"); renderLobby(); }
   else {
     show("#game");
-    game.render(s);
+    const memo = JSON.stringify(host.state) + theme.id + gameKey;
+    if (memo !== lastRenderMemo) { lastRenderMemo = memo; game.render(s); }
     if (lastPhase === "lobby" || lastPhase === null) document.activeElement?.blur?.();
   }
   lastPhase = s.phase;
@@ -179,23 +243,23 @@ async function main() {
   try {
     await P.boot();
     let code = await P.resumeHostedRoom();
-    if (!code) code = await P.createRoom({ game: game.id, theme: "classic", initialState: initialState() });
+    if (!code) code = await P.createRoom({ game: "party", theme: "classic", initialState: freshState("battleshits") });
     host = new P.HostRoom(code, {
-      onPlayers: () => { game.onPlayersChanged(); render(); },
-      onAction: (uid, a) => game.onAction(uid, a),
-      onSeatTransfer: (o, n, seat) => game.onSeatTransfer(o, n, seat),
+      onPlayers: () => { game?.onPlayersChanged(); render(); },
+      onAction: (uid, a) => game?.onAction(uid, a),
+      onSeatTransfer: (o, n, seat) => game?.onSeatTransfer(o, n, seat),
       onTheme,
       onGone: () => location.reload(),
     });
     await host.open();
-    if (!host.state) host.state = initialState();
-    game.init(roomApi);
+    if (!host.state) host.state = freshState("battleshits");
+    activate(gameId(host.state));
     $("#code").textContent = code;
     const url = P.joinUrl(code);
     $("#url").textContent = url.replace(/^https?:\/\//, "");
     $("#qr").innerHTML = P.qrSvg(url);
     onTheme(host.theme || "classic");
-    setInterval(() => game.tick(P.now()), 250);
+    setInterval(() => game?.tick(P.now()), 250);
     let amb = 0;
     setInterval(() => {
       amb += 1;

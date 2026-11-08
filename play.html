@@ -12,6 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="common.css">
 <link rel="stylesheet" href="play.css">
+<link rel="stylesheet" href="games.css">
 </head>
 <body>
 <div id="app">
@@ -19,7 +20,7 @@
   <main id="main">
     <form class="join panel" id="join" autocomplete="off" hidden>
       <h1 class="title">Battleshits</h1>
-      <p class="sub" id="joinTag">Grab a phone. Sink some ships.</p>
+      <p class="sub" id="joinTag">Your phone is the controller.</p>
       <label for="code">Room code</label>
       <input id="code" maxlength="4" inputmode="text" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="ABCD">
       <label for="name">Your name</label>
@@ -38,7 +39,8 @@
 import * as P from "./platform.js";
 import { getTheme, applyTheme } from "./themes.js";
 import { play, unlockAudio, autoUnlock } from "./sound.js";
-import { createPhone, normalizeState } from "./battleshits.js";
+import { GAMES, gameId } from "./games.js";
+import { seatLabel } from "./kit.js";
 
 const $ = (s) => document.querySelector(s);
 const LS = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }, del: (k) => { try { localStorage.removeItem(k); } catch {} } };
@@ -49,15 +51,25 @@ autoUnlock();
 let theme = getTheme("classic");
 applyTheme(theme);
 let room = null, state = null, me = null, priv = {}, players = {};
-const phone = createPhone();
 const sound = (n, o) => play(theme.sounds[n], o);
-phone.mount({
+const phoneCtx = {
   el: $("#game"),
   send: (type, payload) => room?.send(type, payload).catch((e) => console.error("send", e)),
   now: P.now,
   sound,
   vibrate: (p) => { try { navigator.vibrate?.(p); } catch {} },
-});
+};
+const phones = {};
+let phone = null, phoneKey = null;
+function usePhone(id) {
+  if (id === phoneKey) return phone;
+  phone?.unmount?.();
+  $("#game").innerHTML = "";
+  phoneKey = id;
+  phone = phones[id] || (phones[id] = GAMES[id].mod.createPhone());
+  if (!phone._mounted) { phone.mount(phoneCtx); phone._mounted = true; }
+  return phone;
+}
 
 function show(id) { for (const s of ["#join", "#wait", "#game", "#msg"]) $(s).hidden = s !== id; }
 
@@ -115,21 +127,25 @@ function message(text, offerJoin) {
 
 function render() {
   if (!room || !me) return;
-  const s = normalizeState(state);
+  const gid = gameId(state);
+  const s = GAMES[gid].mod.normalizeState(state);
   $("#who").textContent = `${room.code} · ${me.name}`;
   if (s.phase === "lobby") {
+    if (phoneKey) { phone?.unmount?.(); phoneKey = null; phone = null; }
     show("#wait");
-    const roleLbl = { p1: "You're Player 1", p2: "You're Player 2", spectator: "You're spectating" };
-    const list = Object.entries(players).map(([id, p]) => `<li class="${id === room.uid ? "me" : ""}">${P.esc(p.name)}${p.role !== "spectator" ? ` · ${p.role === "p1" ? "P1" : "P2"}` : ""}</li>`).join("");
+    const roleTxt = me.role === "spectator" ? "You're spectating" : me.role ? `You're ${seatLabel(me.role)}` : "Joining…";
+    const list = Object.entries(players).map(([id, p]) => `<li class="${id === room.uid ? "me" : ""}">${P.esc(p.name)}${p.role !== "spectator" ? ` · P${String(p.role).slice(1)}` : ""}</li>`).join("");
+    const g = GAMES[gid];
     $("#wait").innerHTML = `<h1>You're in!</h1>
-      <div class="seat-badge ${me.role}">${roleLbl[me.role] || "Joining…"}</div>
+      <div class="seat-badge ${me.role === "spectator" ? "spectator" : "seat"}">${roleTxt}</div>
+      <p class="sub">Game: <b>${g.icon} ${P.esc(g.name)}</b> · ${P.esc(g.blurb)}</p>
       <p class="sub">Theme: <b>${P.esc(theme.name)}</b></p>
       <p class="sub">Waiting for the host to start the game on the TV…</p>
       <ul>${list}</ul>`;
     return;
   }
   show("#game");
-  phone.render({ state, me: { ...me, uid: room.uid }, priv, theme, players });
+  usePhone(gid).render({ state, me: { ...me, uid: room.uid }, priv, theme, players });
 }
 
 // Auto-rejoin after a reload (same browser = same anonymous uid = same seat).

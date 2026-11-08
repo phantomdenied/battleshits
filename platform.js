@@ -10,9 +10,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 import { firebaseConfig } from "./firebase-config.js";
 
-export const VERSION = "0.1.1";
+export const VERSION = "0.2.0";
 export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I, O (and no digits at all)
-export const SEATS = ["p1", "p2"];
+export const SEATS = ["p1", "p2"]; // default; a game can ask for up to 8 (p1..p8)
 const ROOM_TTL = 24 * 3600 * 1000;
 const STALE_MS = 45000;
 const HEARTBEAT_MS = 15000;
@@ -111,6 +111,8 @@ export class HostRoom {
     this.players = {};
     this.theme = null;
     this.unsubs = [];
+    this.seats = SEATS;        // seats the current game uses
+    this.joinMidGame = false;  // seat newcomers into free seats outside the lobby too
   }
   r(p) { return ref(db, `rooms/${this.code}/${p}`); }
 
@@ -150,14 +152,46 @@ export class HostRoom {
   setPrivate(puid, key, val) { return set(this.r(`private/${puid}/${key}`), val ?? null); }
   async getPrivate(puid) { return (await get(this.r(`private/${puid}`))).val(); }
 
-  seatOf(puid) { const r = this.players[puid]?.role; return SEATS.includes(r) ? r : null; }
+  seatOf(puid) { const r = this.players[puid]?.role; return this.seats.includes(r) ? r : null; }
   uidForSeat(seat) { return Object.keys(this.players).find((k) => this.players[k].role === seat) || null; }
   seatInfo() {
     const out = {};
-    for (const s of SEATS) { const u = this.uidForSeat(s); out[s] = u ? { uid: u, name: this.players[u].name } : null; }
+    for (const s of this.seats) { const u = this.uidForSeat(s); out[s] = u ? { uid: u, name: this.players[u].name } : null; }
     return out;
   }
   isOnline(puid) { return isOnline(this.players[puid]); }
+
+  /**
+   * Switch the seat layout (e.g. when the host picks another game). Players in
+   * seats that no longer exist become spectators; with fill, online spectators
+   * are moved into free seats in join order.
+   */
+  async setSeats(seats, { joinMidGame = false, fill = true } = {}) {
+    this.seats = seats;
+    this.joinMidGame = joinMidGame;
+    const P = this.players;
+    const ids = Object.keys(P).sort((a, b) => (P[a].joinedAt || 0) - (P[b].joinedAt || 0));
+    const ups = {};
+    const taken = new Set();
+    for (const id of ids) {
+      const r = P[id].role;
+      if (r !== "spectator" && !seats.includes(r)) ups[`players/${id}/role`] = "spectator";
+      else if (seats.includes(r)) {
+        if (taken.has(r)) ups[`players/${id}/role`] = "spectator"; else taken.add(r);
+      }
+    }
+    if (fill) {
+      for (const id of ids) {
+        const r = ups[`players/${id}/role`] ?? P[id].role;
+        if (r !== "spectator" || !isOnline(P[id])) continue;
+        const free = seats.find((s) => !taken.has(s));
+        if (!free) break;
+        taken.add(free);
+        ups[`players/${id}/role`] = free;
+      }
+    }
+    if (Object.keys(ups).length) await update(ref(db, `rooms/${this.code}`), ups);
+  }
 
   setRole(puid, role) { return update(this.r(`players/${puid}`), { role }); }
   async kick(puid) {
@@ -165,10 +199,10 @@ export class HostRoom {
     await remove(this.r(`players/${puid}`));
     await remove(this.r(`private/${puid}`));
   }
-  // Cycle a player's seat: spectator -> p1 -> p2 -> spectator, swapping with whoever holds it.
+  // Cycle a player's seat: spectator -> p1 -> p2 ... -> spectator, swapping with whoever holds it.
   async cycleSeat(puid) {
     const cur = this.players[puid]?.role;
-    const order = ["spectator", "p1", "p2"];
+    const order = ["spectator", ...this.seats];
     const next = order[(order.indexOf(cur) + 1) % order.length];
     const ups = { [`players/${puid}/role`]: next };
     if (next !== "spectator") {
@@ -191,7 +225,7 @@ export class HostRoom {
     const ups = {};
     const transfers = [];
     const ids = Object.keys(P).sort((a, b) => (P[a].joinedAt || 0) - (P[b].joinedAt || 0));
-    const taken = new Set(ids.map((k) => P[k].role).filter((r) => SEATS.includes(r)));
+    const taken = new Set(ids.map((k) => P[k].role).filter((r) => this.seats.includes(r)));
     for (const id of ids) {
       const p = P[id];
       if (!p.claimed) {
@@ -211,8 +245,8 @@ export class HostRoom {
           ups[`players/${id}/name`] = `${base} ${n}`;
         }
         let role = "spectator";
-        if (this.state?.phase === "lobby") {
-          role = SEATS.find((s) => !taken.has(s)) || "spectator";
+        if (this.state?.phase === "lobby" || this.joinMidGame) {
+          role = this.seats.find((s) => !taken.has(s)) || "spectator";
           if (role !== "spectator") taken.add(role);
         }
         ups[`players/${id}/role`] = role;

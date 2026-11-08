@@ -1,6 +1,13 @@
 # Battleshits
 
-A Jackbox-style party Battleship for the TV. The TV (an onn Google TV stick, or any browser) hosts the game, and every phone is a controller. Two phones play and any extra phones spectate and throw emotes onto the screen. There are two themes: **Classic Mode** (navy, sonar, explosions) and **Shit Mode** (sewer water, toilet bowls, flushes).
+Jackbox-style party games for the TV. The TV (an onn Google TV stick, or any browser) hosts the game, and every phone is a controller. Phones without a seat spectate and throw emotes onto the screen. Every game has two themes: **Classic Mode** and **Shit Mode**.
+
+| Game | Players | |
+|---|---|---|
+| 🚢 **Battleshits** | 2 | Battleship: hide your fleet, take turns firing |
+| 🔴 **Connect 4** (Connect Plop) | 2 | Drop discs, four in a row wins |
+| 🔤 **Hangman** (Flushman) | 2–8 | Take turns setting a word; everyone else guesses |
+| 🃏 **Blackjack** (Crapjack) | 1–6 | Everyone against the TV dealer |
 
 **Play now**
 
@@ -14,12 +21,21 @@ A Jackbox-style party Battleship for the TV. The TV (an onn Google TV stick, or 
 
 1. Open the TV page, or the **Battleshits** app on the Google TV home row. The TV shows a room code and a QR code.
 2. Each phone scans the QR code (or opens the phone URL and types the code), enters a name, and taps **Join**. The first two phones become Player 1 and Player 2; everyone else spectates.
-3. On the TV, use the remote to pick a theme and press **Start**. **Swap** moves people between seats, and **Kick** removes someone.
+3. On the TV, use the remote to pick a **game** and a theme, then press **Start**. **Swap** moves people between seats, and **Kick** removes someone.
+   During a game, press any button on the remote to bring up **Change game** (press it twice) to go back to the game picker.
+**Battleshits**
+
 4. Phones: drag ships onto the grid, tap a ship to rotate it, or tap **Randomize**. Then tap **Ready**.
 5. On your turn, tap a square on the enemy grid. A hit gives you another shot. You get 30 seconds per shot; if you're too slow, the TV fires at a random square for you.
 6. Sink all five ships to win. Both players tap **Rematch** to play again. The win tally carries over, and the host can switch themes between rounds.
 
-**Rules:** 10×10 grid with ships of length 5, 4, 3, 3 and 2. Ships can touch but can't overlap or hang off the edge. Player 1 shoots first in round 1, and the first shooter alternates each round. If the shooter's phone disconnects, their timer pauses for up to 60 seconds while they reconnect.
+**Battleshits rules:** 10×10 grid with ships of length 5, 4, 3, 3 and 2. Ships can touch but can't overlap or hang off the edge. Player 1 shoots first in round 1, and the first shooter alternates each round. If the shooter's phone disconnects, their timer pauses for up to 60 seconds while they reconnect.
+
+**Connect 4:** tap a column on your phone to drop a disc. 20 seconds per move (the TV drops one for you if you're too slow). The first player alternates each round, and both players tap **Play again** for a rematch.
+
+**Hangman:** everyone sets one word per game, in turn. The setter types a word or phrase (up to 4 words) on their phone, or taps 🎲 **Random**. Everyone else takes turns: tap a letter, or tap **I know it — solve** to guess the whole thing. A correct letter keeps your turn; a wrong letter or wrong solve is a strike and passes the turn; 6 strikes and the setter wins the round. Scoring: +1 per letter revealed, +3 for finishing the word, +2 per hidden letter for a correct solve. The setter gets +1 per wrong guess and +3 if nobody gets it. 25 seconds per turn (running out passes the turn without a strike).
+
+**Blackjack:** everyone starts with 1000 chips. Pick a bet ($10–$500) with the chip buttons and tap **Bet**; the TV deals once everyone has bet, or after 25 seconds. On your turn: **Hit**, **Stand**, **Double** (first two cards) or **Split** (a pair, once). Dealer stands on 17, blackjack pays 3:2, and anyone who goes broke gets a 500-chip bailout. New phones can join between hands. 20 seconds per decision (running out stands).
 
 **Reconnecting:** reloading the phone puts you straight back in your seat. On a different phone or browser, join the same room with the **same name** and you get your seat (and your fleet) back. If the TV reloads, it resumes the same room and the game continues.
 
@@ -49,6 +65,10 @@ No build step, no framework, no npm. Plain HTML, CSS and JS modules, with librar
 |---|---|
 | `tv.html` / `tv.css` | TV host and display: lobby, D-pad navigation, runs the authoritative game |
 | `play.html` / `play.css` | Phone controller: join, placement, battle, spectator, game over |
+| `games.js` | The list of games the TV offers (add a game here) |
+| `connect4.js`, `hangman.js`, `blackjack.js` | The other game modules, same shape as `battleshits.js` |
+| `kit.js` | Shared helpers for game modules: TV layers, emotes, timer ring, between-round controls |
+| `games.css` | Styles for Connect 4, Hangman and Blackjack |
 | `platform.js` | **Game-agnostic** platform: rooms, anonymous auth, presence, seats, reconnect-by-name, action queue, server clock, wake lock, QR, spatial nav |
 | `battleshits.js` | The game module: pure rules engine, TV views (`createHost`) and phone views (`createPhone`) |
 | `themes.js` | One config block per theme: colors, fonts, ship names, sound recipes, strings, emotes, background |
@@ -56,7 +76,8 @@ No build step, no framework, no npm. Plain HTML, CSS and JS modules, with librar
 | `common.css` | Shared board, ship and theme visuals |
 | `database.rules.json` | Realtime Database security rules |
 | `dev/harness.html` | Dev-only: plays full games with simulated players on the real TV and phone views, without Firebase |
-| `dev/engine.test.mjs` | `node dev/engine.test.mjs`: rules tests plus a 300-game simulation |
+| `dev/engine.test.mjs` | `node dev/engine.test.mjs`: Battleshits rules tests plus a 300-game simulation |
+| `dev/games.test.mjs` | `node dev/games.test.mjs`: rules tests and simulations for Connect 4, Hangman and Blackjack |
 | `android/` | Android TV wrapper (WebView) built by GitHub Actions |
 
 ### Architecture
@@ -75,7 +96,8 @@ No build step, no framework, no npm. Plain HTML, CSS and JS modules, with librar
     private/{uid}  fleet, notice           # that player + host only
     kicked/{uid}
   ```
-* **Module interface.** A game implements `init(room)`, `onAction(uid, action)` and `render(state)` (plus `start()`, `tick(now)`, `onPlayersChanged()`, `onSeatTransfer()`) on the TV, and `mount(ctx)`/`render(view)` on the phone. A future game (Blackjack, Hold'em…) is a new module file. `platform.js` doesn't change.
+* **Module interface.** A game module exports `id`, `initialState()`, `normalizeState()`, `createHost()` and `createPhone()`. The host implements `init(room)`, `canStart()`, `start()`, `onAction(uid, action)`, `tick(now)`, `render(state)`, `onPlayersChanged()` and `onSeatTransfer()`; the phone implements `mount(ctx)`, `render(view)` and `unmount()`. Register it in `games.js` with its seat count (up to 8). `platform.js`, `tv.html` and `play.html` don't change.
+* `state.game` says which game a room is playing, so phones switch modules automatically when the host picks another game.
 
 ### Adding a theme
 
@@ -92,7 +114,8 @@ Copy one of the blocks in `themes.js`, give it a new key and `id`, and change th
 ## Development
 
 ```bash
-node dev/engine.test.mjs                 # rules unit tests + 300 simulated games
+node dev/engine.test.mjs                 # Battleshits rules tests + 300 simulated games
+node dev/games.test.mjs                  # Connect 4, Hangman, Blackjack rules tests + simulations
 ```
 Serve the folder with any static server and open `dev/harness.html` (add `?auto` to start automatically) to watch bots play on the real TV and phone views.
 

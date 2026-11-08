@@ -40,7 +40,7 @@
             ".write": "auth != null && root.child('rooms/' + $code + '/hostUid').exists() && (root.child('rooms/' + $code + '/hostUid').val() === auth.uid || (auth.uid === $uid && !root.child('rooms/' + $code + '/kicked/' + $uid).exists() && (!newData.exists() || (newData.child('role').val() === (data.exists() ? data.child('role').val() : 'spectator') && newData.child('claimed').val() === (data.exists() ? data.child('claimed').val() : false)))))",
             ".validate": "newData.hasChildren(['name', 'role'])",
             "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16" },
-            "role": { ".validate": "newData.val() === 'p1' || newData.val() === 'p2' || newData.val() === 'spectator'" },
+            "role": { ".validate": "newData.isString() && newData.val().matches(/^(p[1-8]|spectator)$/)" },
             "claimed": { ".validate": "newData.isBoolean()" },
             "online": { ".validate": "newData.isBoolean()" },
             "lastSeen": { ".validate": "newData.isNumber()" },
