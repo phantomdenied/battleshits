@@ -1,9 +1,10 @@
 // node dev/games.test.mjs — rules tests + random simulations for Connect 4,
-// Hangman and Blackjack. Pure engine code only (no Firebase, no DOM).
+// Hangman, Trivia, Scribble and Blackjack. Pure engine code only (no Firebase, no DOM).
 import * as C4 from "../connect4.js";
 import * as HM from "../hangman.js";
 import * as BJ from "../blackjack.js";
 import * as TQ from "../trivia.js";
+import * as SC from "../scribble.js";
 
 let fails = 0, checks = 0;
 const ok = (cond, msg) => { checks++; if (!cond) { fails++; console.error("FAIL:", msg); } };
@@ -227,6 +228,87 @@ const seated = (n) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`p
     const hard = await TQ.fetchQuestions({ level: "hard", cat: 22, count: 10 }, { rng });
     console.log(`trivia live hard geography: ${hard.questions.length} from ${hard.source}; e.g. "${hard.questions[0].text}" -> ${hard.questions[0].answers[hard.questions[0].correct]}`);
     ok(hard.questions.length === 10, "tq live: hard geography returns 10");
+  }
+}
+
+/* ------------------------------------------------------------- Scribble */
+{
+  const N = SC.N, at = (r, c) => r * N + c, E = SC.EMPTY_BOARD;
+  ok(SC.FULL_BAG.length === 70, "sc: 70 tiles");
+  ok(SC.prem(SC.CENTER) === "*" && SC.prem(0) === "W3" && SC.prem(120) === "W3", "sc: premium layout");
+  let e = SC.evaluatePlay(E, "CATSXYZ", [{ i: at(0, 0), l: "C" }, { i: at(0, 1), l: "A" }]);
+  ok(e.error && /★/.test(e.error), "sc: first word must cover center");
+  e = SC.evaluatePlay(E, "CATSXYZ", [{ i: at(5, 4), l: "C" }, { i: at(5, 5), l: "A" }, { i: at(5, 6), l: "T" }]);
+  ok(!e.error && e.total === 18 && e.words[0].w === "CAT", "sc: CAT across the center scores 18 (got " + e.total + ")");
+  ok(e.rack === "SXYZ", "sc: rack loses played tiles");
+  const b1 = e.board;
+  ok(SC.evaluatePlay(b1, "SXYZ", [{ i: at(5, 4), l: "S" }]).error, "sc: occupied square rejected");
+  ok(SC.evaluatePlay(b1, "SXYZ", [{ i: at(0, 0), l: "S" }, { i: at(0, 1), l: "X" }]).error, "sc: disconnected word rejected");
+  ok(SC.evaluatePlay(b1, "SXYZ", [{ i: at(6, 4), l: "S" }, { i: at(7, 5), l: "X" }]).error, "sc: diagonal rejected");
+  ok(SC.evaluatePlay(b1, "SXYZ", [{ i: at(5, 8), l: "S" }]).error, "sc: gap rejected");
+  ok(SC.evaluatePlay(b1, "SXYZ", [{ i: at(5, 7), l: "Q" }]).error, "sc: tile not in rack rejected");
+  e = SC.evaluatePlay(b1, "SXYZ", [{ i: at(5, 7), l: "S" }]);
+  ok(!e.error && e.words.length === 1 && e.words[0].w === "CATS", "sc: hook S makes CATS");
+  e = SC.evaluatePlay(b1, "?XYZ", [{ i: at(6, 4), l: "?", as: "O" }, { i: at(6, 5), l: "X" }]);
+  ok(!e.error && e.words.map((w) => w.w).sort().join() === "AX,CO,OX", "sc: parallel play makes cross words (" + (e.words || []).map((w) => w.w) + ")");
+  ok(e.words.find((w) => w.w === "CO").s === 3, "sc: blank scores 0");
+  ok(SC.evaluatePlay(b1, "?XYZ", [{ i: at(6, 4), l: "?" }]).error, "sc: blank needs a letter");
+  e = SC.evaluatePlay(E, "ABCDEFG", "ABCDEFG".split("").map((l, k) => ({ i: at(5, 2 + k), l })));
+  ok(!e.error && e.bingo && e.total >= 50, "sc: all 7 tiles = +50");
+  // wrap-around must not join rows
+  const edge = E.split(""); edge[at(4, 10)] = "A"; edge[at(5, 0)] = "B";
+  ok(SC.evaluatePlay(edge.join(""), "T", [{ i: at(4, 9), l: "T" }]).words[0].w === "TA", "sc: words don't wrap rows");
+  // flow: start, pass x4 ends a 2-player game
+  let g = SC.startGame(SC.initialState(), seated(2), 0, rng);
+  ok(g.state.turn === "p1" && g.secret.racks.p1.length === 7 && g.secret.bag.length === 56, "sc: deal 7 each");
+  let r = g;
+  for (let k = 0; k < 4; k++) r = SC.passTurn(r.state, r.secret, r.state.turn, k);
+  ok(r.state.phase === "gameOver" && !r.state.outBy, "sc: 2 rounds of passes ends the game");
+  ok(Object.values(r.state.scores).every((v) => v <= 0), "sc: leftovers count against you");
+  ok(SC.swapTiles(g.state, g.secret, "p2", "A", 1).error, "sc: swap out of turn rejected");
+  // random simulations: tile conservation + games end
+  let ended = 0;
+  for (let game = 0; game < 150; game++) {
+    let st = SC.startGame({ game_no: game }, seated(2 + (game % 3)), 0, rng);
+    let steps = 0;
+    while (st.state.phase === "playing" && steps++ < 500) {
+      const s = st.state, sec = st.secret, seat = s.turn, rack = sec.racks[seat];
+      let res = null;
+      for (let tries = 0; tries < 60 && !res; tries++) {
+        const n = 1 + Math.floor(rng() * Math.min(4, rack.length));
+        const horiz = rng() < 0.5, r0 = Math.floor(rng() * N), c0 = Math.floor(rng() * N);
+        const tiles = [], letters = [...rack];
+        let r1 = r0, c1 = c0;
+        while (tiles.length < n && r1 < N && c1 < N) {
+          const i = at(r1, c1);
+          if (s.board[i] === ".") { const l = letters.splice(Math.floor(rng() * letters.length), 1)[0]; tiles.push({ i, l, as: l === "?" ? "E" : undefined }); }
+          horiz ? c1++ : r1++;
+        }
+        const ev = SC.evaluatePlay(s.board, rack, tiles);
+        if (!ev.error) res = SC.commitPlay(s, sec, seat, ev, steps);
+      }
+      if (!res) res = sec.bag.length >= 2 && rng() < 0.5 ? SC.swapTiles(s, sec, seat, rack.slice(0, 2), steps, rng) : SC.passTurn(s, sec, seat, steps);
+      st = res;
+      const onBoard = st.state.board.split(".").join("").length;
+      const inRacks = Object.values(st.secret.racks).join("").length;
+      if (onBoard + inRacks + st.secret.bag.length !== 70) { ok(false, "sc sim: tiles not conserved"); break; }
+    }
+    if (st.state.phase === "gameOver") ended++;
+    if (st.state.outBy) ok(st.state.final[st.state.outBy] === Object.entries(st.state.final).filter(([k]) => k !== st.state.outBy).reduce((a, [, v]) => a - v, 0), "sc sim: going out collects leftovers");
+  }
+  ok(ended === 150, "sc sim: every game ends (" + ended + "/150)");
+  // dictionary client (fake network)
+  const fakeCheck = async (url) => ({ ok: true, json: async () => ({ results: url.split("/check/")[1].split(",").map((w) => ({ word: w, valid: w !== "xqz" })) }) });
+  let c = await SC.checkWords(["CAT", "XQZ"], fakeCheck);
+  ok(c.invalid?.length === 1 && c.invalid[0] === "XQZ", "sc: invalid word reported");
+  c = await SC.checkWords(["DOGGO"], async () => { throw new Error("offline"); });
+  ok(c.offline, "sc: offline is reported, not thrown");
+  if (!process.env.OFFLINE) {
+    const live = await SC.checkWords(["QI", "ZA", "SCRIBBLE", "XYZZY"]);
+    ok(live.invalid && live.invalid.join() === "XYZZY", "sc live: WordSoHard check (" + JSON.stringify(live) + ")");
+    const d = await SC.defineWord("scribble");
+    console.log("scribble live define:", d && d.text);
+    ok(d && d.text.length > 5, "sc live: definition");
   }
 }
 

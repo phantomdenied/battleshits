@@ -6,6 +6,7 @@ import * as connect4 from "./connect4.js";
 import * as hangman from "./hangman.js";
 import * as blackjack from "./blackjack.js";
 import * as trivia from "./trivia.js";
+import * as scribble from "./scribble.js";
 import { seatList } from "./kit.js";
 
 export const GAMES = {
@@ -13,6 +14,7 @@ export const GAMES = {
   connect4: { mod: connect4, name: "Connect 4", icon: "🔴", blurb: "Four in a row · 2 players", seats: seatList(2) },
   hangman: { mod: hangman, name: "Hangman", icon: "🔤", blurb: "Guess the word · 2–8 players", seats: seatList(8) },
   trivia: { mod: trivia, name: "Trivia", icon: "❓", blurb: "Quiz with Kids (10+) mode · 1–8 players", seats: seatList(8), joinMidGame: true },
+  scribble: { mod: scribble, name: "Scribble", icon: "✍️", blurb: "Crossword word game · 2–4 players", seats: seatList(4) },
   blackjack: { mod: blackjack, name: "Blackjack", icon: "🃏", blurb: "Beat the dealer · 1–6 players", seats: seatList(6), joinMidGame: true },
 };
 export const GAME_IDS = Object.keys(GAMES);

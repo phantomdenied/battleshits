@@ -10,7 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js";
 import { firebaseConfig } from "./firebase-config.js";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";
 export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I, O (and no digits at all)
 export const SEATS = ["p1", "p2"]; // default; a game can ask for up to 8 (p1..p8)
 const ROOM_TTL = 24 * 3600 * 1000;
